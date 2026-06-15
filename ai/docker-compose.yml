@@ -56,12 +56,12 @@ services:
     pull_policy: always
     restart: unless-stopped
     ports:
-      - "127.0.0.1:${AI_PORT:-8000}:8000"
+      - "${AI_BIND_ADDRESS:-192.168.0.162}:${AI_PORT:-8000}:8000"
     environment:
       TZ: ${TZ:-Asia/Seoul}
-      LLM_PROVIDER: ${LLM_PROVIDER:-local}
-      EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:-local}
-      OLLAMA_BASE_URL: http://ollama:11434
+      LLM_PROVIDER: ${LLM_PROVIDER:?LLM_PROVIDER is required}
+      EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:?EMBEDDING_PROVIDER is required}
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://ollama:11434}
       QDRANT_HOST: qdrant
       QDRANT_PORT: 6333
 
@@ -81,8 +81,6 @@ services:
     depends_on:
       qdrant:
         condition: service_healthy
-      ollama-init:
-        condition: service_completed_successfully
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://localhost:8000/health || exit 1"]
       interval: 15s

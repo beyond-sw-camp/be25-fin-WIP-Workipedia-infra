@@ -27,6 +27,8 @@ jobs:
       STORAGE_BUCKET: compose-validation
       STORAGE_PUBLIC_BASE_URL: https://example.invalid
       AI_BASE_URL: https://ai.example.invalid
+      LLM_PROVIDER: openai
+      EMBEDDING_PROVIDER: openai
     strategy:
       matrix:
         target:
