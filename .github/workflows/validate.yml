@@ -1,0 +1,30 @@
+name: Infra Validate
+
+on:
+  pull_request:
+    branches:
+      - main
+      - dev
+  push:
+    branches:
+      - main
+      - dev
+
+permissions:
+  contents: read
+
+jobs:
+  compose:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        target:
+          - be
+          - ai
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate Docker Compose
+        working-directory: ${{ matrix.target }}
+        run: docker compose --env-file .env.example config --quiet

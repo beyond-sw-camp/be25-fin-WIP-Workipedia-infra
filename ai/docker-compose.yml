@@ -1,0 +1,109 @@
+name: workipedia-ai
+
+services:
+  qdrant:
+    image: qdrant/qdrant:v1.13.6
+    restart: unless-stopped
+    volumes:
+      - qdrant-data:/qdrant/storage
+    environment:
+      TZ: ${TZ:-Asia/Seoul}
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:6333/healthz || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+      start_period: 30s
+    networks:
+      - data
+
+  ollama:
+    image: ollama/ollama:0.30.7
+    restart: unless-stopped
+    volumes:
+      - ollama-data:/root/.ollama
+    environment:
+      TZ: ${TZ:-Asia/Seoul}
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 15s
+      timeout: 10s
+      retries: 15
+      start_period: 30s
+    networks:
+      - app
+      - data
+
+  ollama-init:
+    image: ollama/ollama:0.30.7
+    restart: "no"
+    environment:
+      OLLAMA_HOST: http://ollama:11434
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        ollama pull "${CHAT_MODEL:-llama3.1:8b}"
+        ollama pull "${EMBEDDING_MODEL:-bge-m3}"
+    depends_on:
+      ollama:
+        condition: service_healthy
+    networks:
+      - app
+      - data
+
+  ai:
+    image: ${AI_IMAGE:?AI_IMAGE is required}
+    pull_policy: always
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${AI_PORT:-8000}:8000"
+    environment:
+      TZ: ${TZ:-Asia/Seoul}
+      LLM_PROVIDER: ${LLM_PROVIDER:-local}
+      EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:-local}
+      OLLAMA_BASE_URL: http://ollama:11434
+      QDRANT_HOST: qdrant
+      QDRANT_PORT: 6333
+
+      TOOL_CLIENT: ${TOOL_CLIENT:-stub}
+      BE_BASE_URL: ${BE_BASE_URL:-https://api.workipedia.wiki}
+      TOOL_HTTP_TIMEOUT: ${TOOL_HTTP_TIMEOUT:-25}
+      MAX_CONTEXT_MESSAGES: ${MAX_CONTEXT_MESSAGES:-10}
+      CONTEXTUALIZE_LLM_TIMEOUT: ${CONTEXTUALIZE_LLM_TIMEOUT:-25}
+
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      GOOGLE_API_KEY: ${GOOGLE_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      ROUTING_SCORE_THRESHOLD: ${ROUTING_SCORE_THRESHOLD:-0.0}
+      ROUTING_MARGIN_THRESHOLD: ${ROUTING_MARGIN_THRESHOLD:-0.5}
+    volumes:
+      - huggingface-cache:/home/workipedia/.cache/huggingface
+    depends_on:
+      qdrant:
+        condition: service_healthy
+      ollama-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8000/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 20
+      start_period: 120s
+    networks:
+      - app
+      - data
+
+networks:
+  app:
+    name: workipedia-ai-app
+  data:
+    name: workipedia-ai-data
+    internal: true
+
+volumes:
+  qdrant-data:
+    name: ${QDRANT_VOLUME_NAME:-workipedia-ai_workipedia-qdrant-data}
+  ollama-data:
+    name: ${OLLAMA_VOLUME_NAME:-workipedia-ai_workipedia-ollama-data}
+  huggingface-cache:
+    name: ${HUGGINGFACE_CACHE_VOLUME_NAME:-workipedia-ai_huggingface-cache}
