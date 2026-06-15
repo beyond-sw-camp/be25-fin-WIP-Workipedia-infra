@@ -1,6 +1,20 @@
 name: workipedia-be
 
 services:
+  cloudflare-ddns:
+    image: favonia/cloudflare-ddns:1
+    restart: unless-stopped
+    network_mode: host
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      CLOUDFLARE_API_TOKEN: ${CLOUDFLARE_API_TOKEN:?CLOUDFLARE_API_TOKEN is required}
+      IP4_DOMAINS: ${DDNS_DOMAINS:-api.workipedia.wiki,ai.workipedia.wiki}
+      PROXIED: "false"
+
   mariadb:
     image: mariadb:11.4
     restart: unless-stopped

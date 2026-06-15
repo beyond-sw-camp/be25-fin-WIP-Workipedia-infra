@@ -90,6 +90,27 @@ sudo certbot --nginx -d api.workipedia.wiki -d ai.workipedia.wiki
 
 두 도메인의 DNS는 인증서 발급 전에 같은 공인 IP를 가리켜야 한다. 공유기에서는 TCP `80`, `443`을 `192.168.0.161`로 포워딩하고, AI 서버의 `8000`은 외부에 포워딩하지 않는다.
 
+## DDNS
+
+BE Compose의 `cloudflare-ddns` 서비스가 공인 IPv4 변경을 감지해 다음 DNS 레코드를 자동 갱신한다.
+
+```text
+api.workipedia.wiki
+ai.workipedia.wiki
+```
+
+Cloudflare에서 `Edit zone DNS` 템플릿으로 `workipedia.wiki` 전용 API Token을 생성하고 `.161` 서버의 `be/.env`에 저장한다.
+
+```text
+CLOUDFLARE_API_TOKEN=<Cloudflare API Token>
+```
+
+두 레코드는 SSH와 직접 HTTPS 연결에 사용하므로 Cloudflare DNS에서 `DNS only`로 설정한다. DDNS 상태는 다음 명령으로 확인한다.
+
+```bash
+docker compose logs --tail=100 cloudflare-ddns
+```
+
 ## 이미지 배포
 
 각 애플리케이션 레포가 자신의 이미지를 빌드해 GHCR에 push한다.

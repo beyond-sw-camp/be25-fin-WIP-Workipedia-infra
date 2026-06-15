@@ -29,6 +29,7 @@ jobs:
       AI_BASE_URL: https://ai.example.invalid
       LLM_PROVIDER: openai
       EMBEDDING_PROVIDER: openai
+      CLOUDFLARE_API_TOKEN: compose-validation
     strategy:
       matrix:
         target:
