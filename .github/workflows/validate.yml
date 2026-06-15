@@ -16,6 +16,17 @@ permissions:
 jobs:
   compose:
     runs-on: ubuntu-latest
+    env:
+      BACKEND_IMAGE: example.invalid/workipedia-be:test
+      AI_IMAGE: example.invalid/workipedia-ai:test
+      MARIADB_ROOT_PASSWORD: compose-validation
+      MARIADB_PASSWORD: compose-validation
+      REDIS_PASSWORD: compose-validation
+      JWT_SECRET: compose-validation-secret
+      STORAGE_PROVIDER: s3
+      STORAGE_BUCKET: compose-validation
+      STORAGE_PUBLIC_BASE_URL: https://example.invalid
+      AI_BASE_URL: https://ai.example.invalid
     strategy:
       matrix:
         target:
@@ -27,4 +38,4 @@ jobs:
 
       - name: Validate Docker Compose
         working-directory: ${{ matrix.target }}
-        run: docker compose --env-file .env.example config --quiet
+        run: docker compose config --quiet

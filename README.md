@@ -13,21 +13,18 @@ Workipedia 운영 환경을 서버별 Docker Compose로 관리한다.
 ```text
 .
 ├── be/
-│   ├── docker-compose.yml
-│   └── .env.example
+│   └── docker-compose.yml
 ├── ai/
-│   ├── docker-compose.yml
-│   └── .env.example
+│   └── docker-compose.yml
 └── .github/workflows/validate.yml
 ```
 
-각 서버에 해당 디렉토리와 실제 `.env`를 배치한다.
+각 서버에 해당 디렉토리와 실제 `.env`를 배치한다. 운영 환경값과 비밀값은 Git에 저장하지 않고 서버 배포 절차나 외부 Secret 저장소에서 관리한다.
 
 ## BE 서버
 
 ```bash
 cd be
-cp .env.example .env
 docker compose config
 docker compose pull
 docker compose up -d
@@ -35,18 +32,12 @@ docker compose ps
 ```
 
 Backend는 `127.0.0.1:8080`에만 바인딩한다. 호스트의 Nginx 또는 기존 리버스 프록시가 `api.workipedia.wiki` 요청을 이 포트로 전달한다.
-
-BE가 다른 물리 서버의 AI를 호출하므로 다음 값은 AI 서버의 실제 HTTPS 주소여야 한다.
-
-```text
-AI_BASE_URL=https://ai.workipedia.wiki
-```
+BE가 다른 물리 서버의 AI를 호출하므로 운영 환경에는 AI 서버의 실제 HTTPS 주소를 주입한다.
 
 ## AI 서버
 
 ```bash
 cd ai
-cp .env.example .env
 docker compose config
 docker compose pull
 docker compose up -d
@@ -57,14 +48,7 @@ AI API는 `127.0.0.1:8000`에만 바인딩한다. Qdrant와 Ollama는 Docker 내
 
 로컬 provider를 사용하면 최초 실행 시 `ollama-init`이 채팅·임베딩 모델을 내려받는다. Cross-Encoder 모델 캐시는 `huggingface-cache` 볼륨에 보존한다.
 
-AI의 Tool Calling이 BE 연동 모드일 때만 다음 값을 사용한다.
-
-```text
-TOOL_CLIENT=workipedia
-BE_BASE_URL=https://api.workipedia.wiki
-```
-
-BE Tool 실행 API가 준비되지 않았다면 `TOOL_CLIENT=stub`을 유지한다.
+AI의 Tool Calling을 BE 연동 모드로 운영할 때는 BE 서버 주소와 연동 모드를 운영 환경에 주입한다.
 
 ## 이미지 배포
 
@@ -85,17 +69,7 @@ Compose 프로젝트가 바뀌면 같은 데이터라도 새 볼륨이 생성될
 docker volume ls
 ```
 
-확인한 이름을 `.env`에 지정한다.
-
-```text
-MARIADB_VOLUME_NAME=workipedia_mariadb-data
-REDIS_VOLUME_NAME=workipedia_redis-data
-ELASTICSEARCH_VOLUME_NAME=workipedia_elasticsearch-data
-QDRANT_VOLUME_NAME=workipedia-ai_workipedia-qdrant-data
-OLLAMA_VOLUME_NAME=workipedia-ai_workipedia-ollama-data
-```
-
-실제 이름이 다르면 서버의 값을 사용한다. 마이그레이션 중에는 `docker compose down -v`를 실행하지 않는다.
+확인한 실제 볼륨 이름을 서버의 `.env`에 지정한다. 마이그레이션 중에는 `docker compose down -v`를 실행하지 않는다.
 
 ## 네트워크 원칙
 
@@ -103,6 +77,10 @@ OLLAMA_VOLUME_NAME=workipedia-ai_workipedia-ollama-data
 - BE와 AI API는 localhost에 바인딩하고 리버스 프록시를 통해서만 노출한다.
 - AI 도메인은 방화벽, VPN 또는 프록시 접근 제어로 BE 서버만 호출할 수 있게 제한한다.
 - 실제 secret과 운영 `.env`는 커밋하지 않는다.
+
+## 구성 검증
+
+PR과 `main`, `dev` 브랜치 변경 시 GitHub Actions가 비밀값이 아닌 임시값으로 두 Compose 파일의 문법과 변수 해석만 검증한다.
 
 ## 상태 확인
 

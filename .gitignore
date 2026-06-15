@@ -24,9 +24,10 @@ hs_err_pid*
 replay_pid*
 
 # Runtime secrets
+.env
 **/.env
-!.env.example
-!**/.env.example
+.env.*
+**/.env.*
 
 # OS / IDE
 .DS_Store
