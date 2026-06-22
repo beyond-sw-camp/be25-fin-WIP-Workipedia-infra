@@ -27,8 +27,8 @@ jobs:
       REDIS_PASSWORD: compose-validation
       JWT_SECRET: compose-validation-secret
       INTERNAL_API_KEY: compose-validation
-      AWS_ACCESS_KEY_ID: compose-validation
-      AWS_SECRET_ACCESS_KEY: compose-validation
+      AWS_ACCESS_KEY: compose-validation
+      AWS_SECRET_KEY: compose-validation
       AWS_REGION: ap-northeast-2
       S3_UPLOAD_BUCKET: compose-validation-upload
       AI_BASE_URL: http://ai.example.invalid:8000
