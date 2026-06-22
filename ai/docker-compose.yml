@@ -1,22 +1,6 @@
 name: workipedia-ai
 
 services:
-  qdrant:
-    image: qdrant/qdrant:v1.13.6
-    restart: unless-stopped
-    volumes:
-      - qdrant-data:/qdrant/storage
-    environment:
-      TZ: ${TZ:-Asia/Seoul}
-    healthcheck:
-      test: ["CMD-SHELL", "bash -c ':> /dev/tcp/127.0.0.1/6333'"]
-      interval: 10s
-      timeout: 5s
-      retries: 15
-      start_period: 30s
-    networks:
-      - data
-
   ollama:
     image: ollama/ollama:0.30.7
     restart: unless-stopped
@@ -32,7 +16,6 @@ services:
       start_period: 30s
     networks:
       - app
-      - data
 
   ollama-init:
     image: ollama/ollama:0.30.7
@@ -49,24 +32,23 @@ services:
         condition: service_healthy
     networks:
       - app
-      - data
 
   ai:
     image: ${AI_IMAGE:?AI_IMAGE is required}
     pull_policy: always
     restart: unless-stopped
     ports:
-      - "${AI_BIND_ADDRESS:-192.168.0.162}:${AI_PORT:-8000}:8000"
+      - "0.0.0.0:${AI_PORT:-8000}:8000"
     environment:
       TZ: ${TZ:-Asia/Seoul}
       LLM_PROVIDER: ${LLM_PROVIDER:?LLM_PROVIDER is required}
       EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:?EMBEDDING_PROVIDER is required}
       OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://ollama:11434}
-      QDRANT_HOST: qdrant
-      QDRANT_PORT: 6333
+      QDRANT_HOST: ${QDRANT_HOST:?QDRANT_HOST is required}
+      QDRANT_PORT: ${QDRANT_PORT:-6333}
 
-      TOOL_CLIENT: ${TOOL_CLIENT:-stub}
-      BE_BASE_URL: ${BE_BASE_URL:-https://api.workipedia.wiki}
+      TOOL_CLIENT: ${TOOL_CLIENT:-workipedia}
+      BE_BASE_URL: ${BE_BASE_URL:?BE_BASE_URL is required}
       TOOL_HTTP_TIMEOUT: ${TOOL_HTTP_TIMEOUT:-25}
       MAX_CONTEXT_MESSAGES: ${MAX_CONTEXT_MESSAGES:-10}
       CONTEXTUALIZE_LLM_TIMEOUT: ${CONTEXTUALIZE_LLM_TIMEOUT:-25}
@@ -79,7 +61,7 @@ services:
     volumes:
       - huggingface-cache:/home/workipedia/.cache/huggingface
     depends_on:
-      qdrant:
+      ollama:
         condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://localhost:8000/api/v1/health || exit 1"]
@@ -89,19 +71,13 @@ services:
       start_period: 120s
     networks:
       - app
-      - data
 
 networks:
   app:
     name: workipedia-ai-app
-  data:
-    name: workipedia-ai-data
-    internal: true
 
 volumes:
-  qdrant-data:
-    name: ${QDRANT_VOLUME_NAME:-workipedia-ai_workipedia-qdrant-data}
   ollama-data:
-    name: ${OLLAMA_VOLUME_NAME:-workipedia-ai_workipedia-ollama-data}
+    name: ${OLLAMA_VOLUME_NAME:-workipedia-ai_ollama-data}
   huggingface-cache:
     name: ${HUGGINGFACE_CACHE_VOLUME_NAME:-workipedia-ai_huggingface-cache}

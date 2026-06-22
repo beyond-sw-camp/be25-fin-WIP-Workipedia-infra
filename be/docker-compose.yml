@@ -1,40 +1,6 @@
 name: workipedia-be
 
 services:
-  cloudflare-ddns:
-    image: favonia/cloudflare-ddns:1
-    restart: unless-stopped
-    network_mode: host
-    read_only: true
-    cap_drop:
-      - ALL
-    security_opt:
-      - no-new-privileges:true
-    environment:
-      CLOUDFLARE_API_TOKEN: ${CLOUDFLARE_API_TOKEN:?CLOUDFLARE_API_TOKEN is required}
-      IP4_DOMAINS: ${DDNS_DOMAINS:-api.workipedia.wiki,ai.workipedia.wiki}
-      PROXIED: "false"
-
-  mariadb:
-    image: mariadb:11.4
-    restart: unless-stopped
-    environment:
-      MARIADB_ROOT_PASSWORD: ${MARIADB_ROOT_PASSWORD:?MARIADB_ROOT_PASSWORD is required}
-      MARIADB_DATABASE: ${MARIADB_DATABASE:-workipedia}
-      MARIADB_USER: ${MARIADB_USER:-wip}
-      MARIADB_PASSWORD: ${MARIADB_PASSWORD:?MARIADB_PASSWORD is required}
-      TZ: ${TZ:-Asia/Seoul}
-    volumes:
-      - mariadb-data:/var/lib/mysql
-    healthcheck:
-      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
-      interval: 10s
-      timeout: 5s
-      retries: 15
-      start_period: 30s
-    networks:
-      - data
-
   redis:
     image: redis:7.4-alpine
     restart: unless-stopped
@@ -81,23 +47,24 @@ services:
     pull_policy: always
     restart: unless-stopped
     ports:
-      - "127.0.0.1:${BACKEND_PORT:-8080}:8080"
+      - "0.0.0.0:${BACKEND_PORT:-8080}:8080"
     environment:
       TZ: ${TZ:-Asia/Seoul}
-      SPRING_PROFILES_ACTIVE: local
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-local}
 
-      SPRING_DATASOURCE_URL: jdbc:mariadb://mariadb:3306/${MARIADB_DATABASE:-workipedia}
-      SPRING_DATASOURCE_USERNAME: ${MARIADB_USER:-wip}
-      SPRING_DATASOURCE_PASSWORD: ${MARIADB_PASSWORD:?MARIADB_PASSWORD is required}
+      SPRING_DATASOURCE_URL: jdbc:mariadb://${DB_HOST:?DB_HOST is required}:${DB_PORT:-3306}/${DB_NAME:?DB_NAME is required}
+      SPRING_DATASOURCE_USERNAME: ${DB_USERNAME:?DB_USERNAME is required}
+      SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
       SPRING_DATA_REDIS_HOST: redis
       SPRING_DATA_REDIS_PORT: 6379
       SPRING_DATA_REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD is required}
       SPRING_ELASTICSEARCH_URIS: http://elasticsearch:9200
-      SPRING_JPA_DDL_AUTO: validate
+      SPRING_JPA_DDL_AUTO: ${SPRING_JPA_DDL_AUTO:-validate}
 
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
       JWT_ACCESS_TOKEN_EXPIRATION: ${JWT_ACCESS_TOKEN_EXPIRATION:-12h}
       JWT_REFRESH_TOKEN_EXPIRATION: ${JWT_REFRESH_TOKEN_EXPIRATION:-14d}
+      INTERNAL_API_KEY: ${INTERNAL_API_KEY:?INTERNAL_API_KEY is required}
 
       APP_MAIL_SENDER: ${APP_MAIL_SENDER:-}
       SPRING_MAIL_HOST: ${SPRING_MAIL_HOST:-smtp.gmail.com}
@@ -105,25 +72,19 @@ services:
       SPRING_MAIL_USERNAME: ${SPRING_MAIL_USERNAME:-}
       SPRING_MAIL_PASSWORD: ${SPRING_MAIL_PASSWORD:-}
 
-      STORAGE_PROVIDER: ${STORAGE_PROVIDER:?STORAGE_PROVIDER is required}
-      STORAGE_BUCKET: ${STORAGE_BUCKET:?STORAGE_BUCKET is required}
-      STORAGE_PUBLIC_BASE_URL: ${STORAGE_PUBLIC_BASE_URL:?STORAGE_PUBLIC_BASE_URL is required}
-      R2_ACCESS_KEY: ${R2_ACCESS_KEY:-unused}
-      R2_SECRET_KEY: ${R2_SECRET_KEY:-unused}
-      R2_ACCOUNT_ID: ${R2_ACCOUNT_ID:-unused}
-      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-unused}
-      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-unused}
-      MINIO_ENDPOINT: ${MINIO_ENDPOINT:-http://localhost}
-      AWS_ACCESS_KEY: ${AWS_ACCESS_KEY:-unused}
-      AWS_SECRET_KEY: ${AWS_SECRET_KEY:-unused}
-      AWS_REGION: ${AWS_REGION:-ap-northeast-2}
+      STORAGE_PROVIDER: ${STORAGE_PROVIDER:-s3}
+      S3_UPLOAD_BUCKET: ${S3_UPLOAD_BUCKET:?S3_UPLOAD_BUCKET is required}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:?AWS_ACCESS_KEY_ID is required}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:?AWS_SECRET_ACCESS_KEY is required}
+      AWS_REGION: ${AWS_REGION:?AWS_REGION is required}
+      AWS_ACCESS_KEY: ${AWS_ACCESS_KEY_ID:?AWS_ACCESS_KEY_ID is required}
+      AWS_SECRET_KEY: ${AWS_SECRET_ACCESS_KEY:?AWS_SECRET_ACCESS_KEY is required}
 
       AI_BASE_URL: ${AI_BASE_URL:?AI_BASE_URL is required}
       AI_TIMEOUT_ROUTING_MS: ${AI_TIMEOUT_ROUTING_MS:-5000}
       AI_TIMEOUT_CHATBOT_MS: ${AI_TIMEOUT_CHATBOT_MS:-30000}
+      AI_TIMEOUT_SYNC_MS: ${AI_TIMEOUT_SYNC_MS:-30000}
     depends_on:
-      mariadb:
-        condition: service_healthy
       redis:
         condition: service_healthy
       elasticsearch:
@@ -146,8 +107,6 @@ networks:
     internal: true
 
 volumes:
-  mariadb-data:
-    name: ${MARIADB_VOLUME_NAME:-workipedia_mariadb-data}
   redis-data:
     name: ${REDIS_VOLUME_NAME:-workipedia_redis-data}
   elasticsearch-data:

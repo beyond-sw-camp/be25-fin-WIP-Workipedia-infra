@@ -1,115 +1,172 @@
 # Workipedia Infra
 
-Workipedia 운영 환경을 서버별 Docker Compose로 관리한다.
+Workipedia 운영 인프라는 AWS 리소스와 서버별 Docker Compose로 관리한다. 애플리케이션 소스, 비즈니스 로직, DB migration, API 계약은 각 애플리케이션 레포가 소유하고, 이 레포는 배포 경계와 런타임 환경을 관리한다.
 
-- BE 서버: Backend, MariaDB, Redis, Elasticsearch
-- AI 서버: AI API, Qdrant
-- Frontend: Vercel에서 별도 배포
+## AWS 운영 구조
 
-비즈니스 로직, DB migration과 API 계약은 각 애플리케이션 레포가 소유한다. 이 레포는 이미지 버전, 컨테이너 연결, 영속 볼륨과 런타임 환경만 관리한다.
+```text
+Cloudflare DNS
+  -> CloudFront
+       -> S3 FE Bucket
+       -> /api/* -> ALB -> BE EC2 t3.large
+                              -> RDS MariaDB
+                              -> Redis container
+                              -> Elasticsearch container
+                              -> AI EC2 Auto Scaling Group
+                                    -> Qdrant EC2
+```
 
-## 구조
+- FE: Vue build 결과물을 S3 FE Bucket에 업로드하고 CloudFront로 서비스한다.
+- Upload 파일: FE 정적 파일과 분리된 별도 S3 Upload Bucket을 사용한다.
+- BE: EC2 `t3.large`에서 Docker Compose로 Spring Boot, Redis, Elasticsearch를 실행한다.
+- DB: 로컬 MariaDB 컨테이너를 사용하지 않고 RDS MariaDB endpoint를 사용한다.
+- AI: EC2 Auto Scaling Group에서 Docker Compose로 FastAPI와 Ollama를 실행한다.
+- Qdrant: AI 서버 내부가 아니라 별도 EC2에서 Docker Compose로 실행한다.
+- DNS: Cloudflare DNS를 사용한다. Route 53은 사용하지 않는다.
+- NAT Gateway: 사용하지 않는다. 필요한 outbound 접근은 퍼블릭 서브넷, VPC endpoint, 또는 운영 정책에 맞는 별도 방식을 사용한다.
+
+## 디렉터리 구조
 
 ```text
 .
 ├── be/
 │   ├── docker-compose.yml
-│   └── nginx/
-│       ├── api.workipedia.wiki.conf
-│       └── ai.workipedia.wiki.conf
+│   └── .env.example
 ├── ai/
-│   └── docker-compose.yml
+│   ├── docker-compose.yml
+│   └── .env.example
+├── qdrant/
+│   ├── docker-compose.yml
+│   └── .env.example
+├── legacy/
+│   └── nginx/
 ├── scripts/
 │   └── deploy.sh
-└── .github/workflows/validate.yml
+└── .github/workflows/
+    ├── deploy-fe-s3.yml
+    └── validate.yml
 ```
 
-각 서버에 해당 디렉토리와 실제 `.env`를 배치한다. 운영 환경값과 비밀값은 Git에 저장하지 않고 서버 배포 절차나 외부 Secret 저장소에서 관리한다.
+실제 `.env`와 secret 값은 Git에 저장하지 않는다. 서버에는 각 target 디렉터리의 `.env.example`을 참고해 `.env`를 직접 배치한다.
 
-## BE 서버
+## 필요한 AWS 리소스
 
-```bash
-cd be
-docker compose config
-docker compose pull
-docker compose up -d
-docker compose ps
+- S3 FE Bucket: Vue `dist/` 정적 파일 배포용
+- CloudFront Distribution: 기본 origin은 S3 FE Bucket, `/api/*` behavior는 ALB origin
+- S3 Upload Bucket: 사용자가 업로드한 파일 저장용
+- ALB: CloudFront의 `/api/*` 요청을 BE EC2 `8080`으로 전달
+- EC2 BE: `t3.large`, Docker Compose로 Spring Boot, Redis, Elasticsearch 실행
+- RDS MariaDB: Spring datasource 대상
+- EC2 Auto Scaling Group for AI: Docker Compose로 FastAPI와 Ollama 실행
+- EC2 Qdrant: Docker Compose로 Qdrant 실행
+- IAM User 또는 Role: FE 배포용 S3 업로드/CloudFront invalidation, BE 업로드 버킷 접근 권한
+
+## FE 배포
+
+`.github/workflows/deploy-fe-s3.yml`은 Vue 프로젝트를 checkout한 뒤 `npm ci`, `npm run build`를 실행하고 `dist/`를 S3 FE Bucket에 동기화한다. `CLOUDFRONT_DISTRIBUTION_ID`가 설정되어 있으면 `/*` invalidation을 수행한다.
+
+필요한 GitHub Secrets:
+
+```text
+AWS_ACCESS_KEY_ID
+AWS_SECRET_ACCESS_KEY
+AWS_REGION
+S3_FE_BUCKET
+CLOUDFRONT_DISTRIBUTION_ID
 ```
 
-Backend는 `127.0.0.1:8080`에만 바인딩한다. 호스트의 Nginx 또는 기존 리버스 프록시가 `api.workipedia.wiki` 요청을 이 포트로 전달한다.
-BE가 다른 물리 서버의 AI를 호출하므로 운영 환경에는 AI 서버의 실제 HTTPS 주소를 주입한다.
+`CLOUDFRONT_DISTRIBUTION_ID`는 배포 직후 캐시 무효화가 필요할 때만 설정한다.
 
-## AI 서버
+## BE 배포
 
-```bash
-cd ai
-docker compose config
-docker compose pull
-docker compose up -d
-docker compose ps
-```
-
-AI API는 AI 서버의 내부 주소 `192.168.0.162:8000`에 바인딩한다. Qdrant는 Docker 내부 네트워크에서만 접근한다. 기본 배포는 클라우드 LLM과 embedding provider를 사용하며, Cross-Encoder 모델 캐시는 `huggingface-cache` 볼륨에 보존한다.
-
-AI의 Tool Calling을 BE 연동 모드로 운영할 때는 BE 서버 주소와 연동 모드를 운영 환경에 주입한다.
-
-Ollama도 함께 실행하고 모델을 미리 내려받지만, 클라우드 provider를 사용하는 동안에는 추론에 사용하지 않는다. 로컬 전환이 필요할 때 서버의 provider 환경값만 변경해 다시 배포한다.
-
-## 서버 배포
-
-배포 서버에는 infra 레포와 해당 서버용 `.env`만 둔다. 애플리케이션 소스 레포는 필요하지 않다.
+BE EC2에는 `be/docker-compose.yml`과 `be/.env`를 배치한다.
 
 ```bash
-git pull
 ./scripts/deploy.sh be
 ```
 
-AI 서버에서는 마지막 인자를 `ai`로 변경한다. 스크립트는 Compose 검증, GHCR 이미지 pull, 컨테이너 갱신과 상태 출력을 순서대로 수행한다.
+BE compose는 다음 컨테이너만 실행한다.
 
-비공개 GHCR 패키지를 처음 받는 서버에서는 패키지 읽기 권한이 있는 GitHub 토큰으로 먼저 로그인한다.
+- `backend`: Spring Boot, `0.0.0.0:8080:8080` 바인딩
+- `redis`: BE EC2 내부 Redis
+- `elasticsearch`: BE EC2 내부 Elasticsearch
 
-```bash
-docker login ghcr.io
-```
+MariaDB, Cloudflare DDNS, Nginx, Certbot 컨테이너는 운영 compose에서 제거했다. Spring datasource는 RDS MariaDB를 가리키도록 `DB_*` 환경변수로 구성한다.
 
-## Nginx와 HTTPS
-
-공유기에서는 BE 서버로 TCP `80`, `443`만 전달한다. DB, Redis, Elasticsearch, Qdrant 포트는 외부에 열지 않는다.
-
-`192.168.0.161` BE 서버를 외부 진입점으로 사용한다. 이 서버의 Nginx가 BE는 로컬 `8080`, AI는 내부망의 `192.168.0.162:8000`으로 전달한다.
-
-```bash
-sudo cp be/nginx/api.workipedia.wiki.conf /etc/nginx/sites-available/api.workipedia.wiki
-sudo cp be/nginx/ai.workipedia.wiki.conf /etc/nginx/sites-available/ai.workipedia.wiki
-sudo ln -s /etc/nginx/sites-available/api.workipedia.wiki /etc/nginx/sites-enabled/api.workipedia.wiki
-sudo ln -s /etc/nginx/sites-available/ai.workipedia.wiki /etc/nginx/sites-enabled/ai.workipedia.wiki
-sudo nginx -t
-sudo systemctl reload nginx
-sudo certbot --nginx -d api.workipedia.wiki -d ai.workipedia.wiki
-```
-
-두 도메인의 DNS는 인증서 발급 전에 같은 공인 IP를 가리켜야 한다. 공유기에서는 TCP `80`, `443`을 `192.168.0.161`로 포워딩하고, AI 서버의 `8000`은 외부에 포워딩하지 않는다.
-
-## DDNS
-
-BE Compose의 `cloudflare-ddns` 서비스가 공인 IPv4 변경을 감지해 다음 DNS 레코드를 자동 갱신한다.
+BE 주요 환경변수:
 
 ```text
-api.workipedia.wiki
-ai.workipedia.wiki
+BACKEND_IMAGE
+DB_HOST
+DB_PORT
+DB_NAME
+DB_USERNAME
+DB_PASSWORD
+REDIS_PASSWORD
+JWT_SECRET
+INTERNAL_API_KEY
+AWS_ACCESS_KEY_ID
+AWS_SECRET_ACCESS_KEY
+AWS_REGION
+S3_UPLOAD_BUCKET
+AI_BASE_URL
 ```
 
-Cloudflare에서 `Edit zone DNS` 템플릿으로 `workipedia.wiki` 전용 API Token을 생성하고 `.161` 서버의 `be/.env`에 저장한다.
+## AI 배포
 
-```text
-CLOUDFLARE_API_TOKEN=<Cloudflare API Token>
-```
-
-두 레코드는 SSH와 직접 HTTPS 연결에 사용하므로 Cloudflare DNS에서 `DNS only`로 설정한다. DDNS 상태는 다음 명령으로 확인한다.
+AI EC2 또는 ASG launch template에는 `ai/docker-compose.yml`과 `ai/.env`를 배치한다.
 
 ```bash
-docker compose logs --tail=100 cloudflare-ddns
+./scripts/deploy.sh ai
 ```
+
+AI compose는 FastAPI와 Ollama를 기본으로 실행하며 FastAPI는 `0.0.0.0:8000:8000`에 바인딩한다. 임베딩은 로컬 Ollama를 사용하고, FastAPI는 Docker 내부 DNS인 `http://ollama:11434`로 Ollama에 접근한다. Qdrant는 외부 EC2를 사용하므로 `QDRANT_HOST`, `QDRANT_PORT`를 환경변수로 받는다. BE가 AI에 접근할 수 있도록 AI 보안그룹에서 BE 보안그룹의 TCP `8000` 접근을 허용한다.
+
+AI 주요 환경변수:
+
+```text
+AI_IMAGE
+LLM_PROVIDER
+EMBEDDING_PROVIDER
+CHAT_MODEL
+EMBEDDING_MODEL
+OLLAMA_BASE_URL
+OPENAI_API_KEY
+GOOGLE_API_KEY
+ANTHROPIC_API_KEY
+QDRANT_HOST
+QDRANT_PORT
+TOOL_CLIENT
+BE_BASE_URL
+```
+
+`EMBEDDING_PROVIDER=ollama`, `OLLAMA_BASE_URL=http://ollama:11434`를 기본값으로 사용한다. `ollama-init` 컨테이너가 `CHAT_MODEL`, `EMBEDDING_MODEL`을 pull하므로, 운영 배포 전에 모델 이름을 `.env`에서 확정한다.
+
+## Qdrant 배포
+
+Qdrant EC2에는 `qdrant/docker-compose.yml`과 `qdrant/.env`를 배치한다.
+
+```bash
+./scripts/deploy.sh qdrant
+```
+
+Qdrant는 `0.0.0.0:6333:6333`으로 바인딩하고 `qdrant-data` 볼륨을 유지한다. 운영에서는 보안그룹으로 BE/AI 보안그룹에서 오는 TCP `6333`만 허용하고, 인터넷 전체 공개는 금지한다.
+
+## 보안그룹 규칙
+
+권장 inbound 규칙:
+
+| 대상 | 허용 소스 | 포트 | 목적 |
+| --- | --- | --- | --- |
+| CloudFront | Cloudflare DNS는 DNS만 담당 | 443 | 사용자 HTTPS 진입 |
+| ALB | CloudFront origin-facing prefix list 또는 제한된 운영 소스 | 80/443 | `/api/*` origin |
+| BE EC2 | ALB SG | 8080 | Spring Boot API |
+| BE EC2 | 운영자 IP | 22 | SSH 운영 |
+| AI ASG EC2 | BE SG | 8000 | BE -> AI 내부 호출 |
+| Qdrant EC2 | BE SG, AI SG | 6333 | 벡터 저장소 접근 |
+| RDS MariaDB | BE SG | 3306 | Spring datasource |
+
+Redis와 Elasticsearch는 BE EC2 내부 Docker network에서만 사용하며 EC2 보안그룹 inbound로 열지 않는다.
 
 ## 이미지 배포
 
@@ -120,41 +177,20 @@ ghcr.io/beyond-sw-camp/be25-fin-wip-workipedia-be:<commit-sha>
 ghcr.io/beyond-sw-camp/be25-fin-wip-workipedia-ai:<commit-sha>
 ```
 
-운영 `.env`의 `BACKEND_IMAGE`, `AI_IMAGE`를 해당 SHA 태그로 갱신한 뒤 각 서버에서 `docker compose pull && docker compose up -d`를 실행한다. 운영에서는 변경 가능한 `latest`보다 commit SHA 태그를 권장한다.
-
-## 기존 볼륨 연결
-
-Compose 프로젝트가 바뀌면 같은 데이터라도 새 볼륨이 생성될 수 있다. 전환 전에 각 서버에서 실제 이름을 확인한다.
-
-```bash
-docker volume ls
-```
-
-확인한 실제 볼륨 이름을 서버의 `.env`에 지정한다. 마이그레이션 중에는 `docker compose down -v`를 실행하지 않는다.
-
-## 네트워크 원칙
-
-- MariaDB, Redis, Elasticsearch, Qdrant 포트는 외부에 공개하지 않는다.
-- BE API는 localhost에, AI API는 AI 서버의 내부 IP에 바인딩하고 BE 서버의 리버스 프록시를 통해 노출한다.
-- AI 서버 방화벽은 `192.168.0.161`에서 오는 TCP `8000` 요청만 허용한다.
-- AI 도메인은 방화벽, VPN 또는 프록시 접근 제어로 BE 서버만 호출할 수 있게 제한한다.
-- 실제 secret과 운영 `.env`는 커밋하지 않는다.
+운영 `.env`의 `BACKEND_IMAGE`, `AI_IMAGE`를 SHA 태그로 갱신한 뒤 각 서버에서 배포 스크립트를 실행한다. 운영에서는 변경 가능한 `latest`보다 commit SHA 태그를 권장한다.
 
 ## 구성 검증
 
-PR과 `main`, `dev` 브랜치 변경 시 GitHub Actions가 비밀값이 아닌 임시값으로 두 Compose 파일의 문법과 변수 해석만 검증한다.
+PR과 `main`, `dev` 브랜치 변경 시 GitHub Actions가 `be`, `ai`, `qdrant` compose 파일의 문법과 변수 해석을 검증한다.
 
-## 상태 확인
-
-```bash
-curl -fsS http://127.0.0.1:8080/actuator/health
-curl -fsS http://192.168.0.162:8000/api/v1/health
-```
-
-장애 확인:
+로컬 검증:
 
 ```bash
-docker compose ps
-docker compose logs --tail=200 backend
-docker compose logs --tail=200 ai
+docker compose --env-file be/.env.example --file be/docker-compose.yml config --quiet
+docker compose --env-file ai/.env.example --file ai/docker-compose.yml config --quiet
+docker compose --env-file qdrant/.env.example --file qdrant/docker-compose.yml config --quiet
 ```
+
+## Legacy
+
+기존 홈서버, Nginx, Certbot, Cloudflare DDNS, Vercel 중심 배포는 현재 운영 기준이 아니다. 과거 참고용 Nginx 설정은 `legacy/nginx/`에만 보관한다.
