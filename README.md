@@ -100,7 +100,7 @@ BE compose는 다음 컨테이너만 실행한다.
 
 - `backend`: Spring Boot, `0.0.0.0:8080:8080` 바인딩
 - `redis`: BE EC2 내부 Redis
-- `elasticsearch`: BE EC2 내부 Elasticsearch
+- `elasticsearch`: BE EC2 내부 Elasticsearch. 워키 검색에서 `nori` analyzer를 쓰므로 `analysis-nori` 플러그인이 포함된 커스텀 이미지를 사용한다.
 
 MariaDB, Cloudflare DDNS, Nginx, Certbot 컨테이너는 운영 compose에서 제거했다. Spring datasource는 RDS MariaDB를 가리키도록 `MARIADB_*` 환경변수로 구성한다.
 
@@ -108,6 +108,7 @@ BE 주요 환경변수:
 
 ```text
 BACKEND_IMAGE
+ELASTICSEARCH_IMAGE
 MARIADB_HOST
 MARIADB_PORT
 MARIADB_DATABASE
@@ -185,10 +186,11 @@ Redis와 Elasticsearch는 BE EC2 내부 Docker network에서만 사용하며 EC2
 
 ```text
 ghcr.io/beyond-sw-camp/be25-fin-wip-workipedia-be:<commit-sha>
+ghcr.io/beyond-sw-camp/be25-fin-wip-workipedia-be-elasticsearch:8.18.8
 ghcr.io/beyond-sw-camp/be25-fin-wip-workipedia-ai:<commit-sha>
 ```
 
-운영 `.env`의 `BACKEND_IMAGE`, `AI_IMAGE`를 SHA 태그로 갱신한 뒤 각 서버에서 배포 스크립트를 실행한다. 운영에서는 변경 가능한 `latest`보다 commit SHA 태그를 권장한다.
+운영 `.env`의 `BACKEND_IMAGE`, `AI_IMAGE`를 SHA 태그로 갱신한 뒤 각 서버에서 배포 스크립트를 실행한다. 운영에서는 변경 가능한 `latest`보다 commit SHA 태그를 권장한다. `ELASTICSEARCH_IMAGE`는 BE 레포의 `docker/elasticsearch/Dockerfile`에서 빌드한 nori 포함 이미지를 사용한다.
 
 ## 구성 검증
 
