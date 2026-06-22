@@ -43,7 +43,6 @@ Cloudflare DNS
 ├── scripts/
 │   └── deploy.sh
 └── .github/workflows/
-    ├── deploy-fe-s3.yml
     └── validate.yml
 ```
 
@@ -61,11 +60,11 @@ Cloudflare DNS
 - EC2 Qdrant: Docker Compose로 Qdrant 실행
 - IAM User 또는 Role: FE 배포용 S3 업로드/CloudFront invalidation, BE 업로드 버킷 접근 권한
 
-## FE 배포
+## FE 배포 책임
 
-`.github/workflows/deploy-fe-s3.yml`은 Vue 프로젝트를 checkout한 뒤 `npm ci`, `npm run build`를 실행하고 `dist/`를 S3 FE Bucket에 동기화한다. `CLOUDFRONT_DISTRIBUTION_ID`가 설정되어 있으면 `/*` invalidation을 수행한다.
+FE CI/CD는 `Workipedia-fe` 레포가 소유한다. FE 레포의 GitHub Actions가 `npm ci`, `npm run build`를 실행하고 `dist/`를 S3 FE Bucket에 동기화한다. `CLOUDFRONT_DISTRIBUTION_ID`가 설정되어 있으면 `/*` invalidation을 수행한다.
 
-필요한 GitHub Secrets:
+FE 레포에 필요한 GitHub Secrets:
 
 ```text
 AWS_ACCESS_KEY_ID
@@ -75,7 +74,19 @@ S3_FE_BUCKET
 CLOUDFRONT_DISTRIBUTION_ID
 ```
 
-`CLOUDFRONT_DISTRIBUTION_ID`는 배포 직후 캐시 무효화가 필요할 때만 설정한다.
+`CLOUDFRONT_DISTRIBUTION_ID`는 배포 직후 캐시 무효화가 필요할 때만 설정한다. infra 레포는 FE 정적 파일을 직접 빌드하거나 업로드하지 않는다.
+
+## GitHub Secrets 배치
+
+각 앱 레포가 자기 CI/CD를 실행한다. 따라서 secret은 실제 workflow가 실행되는 레포에 둔다.
+
+| 레포 | 용도 | 필요한 Secrets |
+| --- | --- | --- |
+| `Workipedia-fe` | FE build 후 S3/CloudFront 배포 | `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION`, `S3_FE_BUCKET`, `CLOUDFRONT_DISTRIBUTION_ID` |
+| `Workipedia-be` | BE image push 후 BE EC2 배포 | `DEPLOY_HOST`, `DEPLOY_PORT`, `DEPLOY_USER`, `DEPLOY_SSH_KEY`, `GHCR_USERNAME`, `GHCR_PAT` |
+| `Workipedia-ai` | AI image push 후 AI EC2 배포 | `DEPLOY_HOST`, `DEPLOY_PORT`, `DEPLOY_USER`, `DEPLOY_SSH_KEY`, `GHCR_USERNAME`, `GHCR_PAT` |
+
+BE 런타임의 S3 Upload Bucket 접근 권한은 GitHub Actions secret이 아니다. BE EC2 서버의 `be/.env`에 `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION`, `S3_UPLOAD_BUCKET`을 설정한다.
 
 ## BE 배포
 
