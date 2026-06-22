@@ -102,17 +102,17 @@ BE compose는 다음 컨테이너만 실행한다.
 - `redis`: BE EC2 내부 Redis
 - `elasticsearch`: BE EC2 내부 Elasticsearch
 
-MariaDB, Cloudflare DDNS, Nginx, Certbot 컨테이너는 운영 compose에서 제거했다. Spring datasource는 RDS MariaDB를 가리키도록 `DB_*` 환경변수로 구성한다.
+MariaDB, Cloudflare DDNS, Nginx, Certbot 컨테이너는 운영 compose에서 제거했다. Spring datasource는 RDS MariaDB를 가리키도록 `MARIADB_*` 환경변수로 구성한다.
 
 BE 주요 환경변수:
 
 ```text
 BACKEND_IMAGE
-DB_HOST
-DB_PORT
-DB_NAME
-DB_USERNAME
-DB_PASSWORD
+MARIADB_HOST
+MARIADB_PORT
+MARIADB_DATABASE
+MARIADB_USER
+MARIADB_PASSWORD
 REDIS_PASSWORD
 JWT_SECRET
 INTERNAL_API_KEY
@@ -151,7 +151,7 @@ TOOL_CLIENT
 BE_BASE_URL
 ```
 
-`EMBEDDING_PROVIDER=ollama`, `OLLAMA_BASE_URL=http://ollama:11434`를 기본값으로 사용한다. `ollama-init` 컨테이너가 `CHAT_MODEL`, `EMBEDDING_MODEL`을 pull하므로, 운영 배포 전에 모델 이름을 `.env`에서 확정한다.
+`EMBEDDING_PROVIDER=local`, `OLLAMA_BASE_URL=http://ollama:11434`를 기본값으로 사용한다. `ollama-init` 컨테이너가 `CHAT_MODEL`, `EMBEDDING_MODEL`을 pull하므로, 운영 배포 전에 모델 이름을 `.env`에서 확정한다.
 
 ## Qdrant 배포
 

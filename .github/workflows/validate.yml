@@ -19,11 +19,11 @@ jobs:
     env:
       BACKEND_IMAGE: example.invalid/workipedia-be:test
       AI_IMAGE: example.invalid/workipedia-ai:test
-      DB_HOST: db.example.invalid
-      DB_PORT: 3306
-      DB_NAME: workipedia
-      DB_USERNAME: workipedia
-      DB_PASSWORD: compose-validation
+      MARIADB_HOST: db.example.invalid
+      MARIADB_PORT: 3306
+      MARIADB_DATABASE: workipedia
+      MARIADB_USER: workipedia
+      MARIADB_PASSWORD: compose-validation
       REDIS_PASSWORD: compose-validation
       JWT_SECRET: compose-validation-secret
       INTERNAL_API_KEY: compose-validation
@@ -33,7 +33,7 @@ jobs:
       S3_UPLOAD_BUCKET: compose-validation-upload
       AI_BASE_URL: http://ai.example.invalid:8000
       LLM_PROVIDER: openai
-      EMBEDDING_PROVIDER: ollama
+      EMBEDDING_PROVIDER: local
       CHAT_MODEL: llama3.1:8b
       EMBEDDING_MODEL: bge-m3
       QDRANT_HOST: qdrant.example.invalid
