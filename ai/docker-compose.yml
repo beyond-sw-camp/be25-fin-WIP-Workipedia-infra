@@ -1,38 +1,6 @@
 name: workipedia-ai
 
 services:
-  ollama:
-    image: ollama/ollama:0.30.7
-    restart: unless-stopped
-    volumes:
-      - ollama-data:/root/.ollama
-    environment:
-      TZ: ${TZ:-Asia/Seoul}
-    healthcheck:
-      test: ["CMD", "ollama", "list"]
-      interval: 15s
-      timeout: 10s
-      retries: 15
-      start_period: 30s
-    networks:
-      - app
-
-  ollama-init:
-    image: ollama/ollama:0.30.7
-    restart: "no"
-    environment:
-      OLLAMA_HOST: http://ollama:11434
-    entrypoint: ["/bin/sh", "-c"]
-    command:
-      - |
-        ollama pull "${CHAT_MODEL:-llama3.1:8b}"
-        ollama pull "${EMBEDDING_MODEL:-bge-m3}"
-    depends_on:
-      ollama:
-        condition: service_healthy
-    networks:
-      - app
-
   ai:
     image: ${AI_IMAGE:?AI_IMAGE is required}
     pull_policy: always
@@ -43,7 +11,7 @@ services:
       TZ: ${TZ:-Asia/Seoul}
       LLM_PROVIDER: ${LLM_PROVIDER:?LLM_PROVIDER is required}
       EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:?EMBEDDING_PROVIDER is required}
-      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://ollama:11434}
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
       QDRANT_HOST: ${QDRANT_HOST:?QDRANT_HOST is required}
       QDRANT_PORT: ${QDRANT_PORT:-6333}
 
@@ -59,11 +27,10 @@ services:
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       ROUTING_SCORE_THRESHOLD: ${ROUTING_SCORE_THRESHOLD:-0.0}
       ROUTING_MARGIN_THRESHOLD: ${ROUTING_MARGIN_THRESHOLD:-0.5}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
       - huggingface-cache:/home/workipedia/.cache/huggingface
-    depends_on:
-      ollama:
-        condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://localhost:8000/api/v1/health || exit 1"]
       interval: 15s
@@ -78,7 +45,5 @@ networks:
     name: workipedia-ai-app
 
 volumes:
-  ollama-data:
-    name: ${OLLAMA_VOLUME_NAME:-workipedia-ai_ollama-data}
   huggingface-cache:
     name: ${HUGGINGFACE_CACHE_VOLUME_NAME:-workipedia-ai_huggingface-cache}

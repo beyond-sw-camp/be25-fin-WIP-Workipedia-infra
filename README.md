@@ -132,7 +132,7 @@ AI EC2 또는 ASG launch template에는 `ai/docker-compose.yml`과 `ai/.env`를 
 ./scripts/deploy.sh ai
 ```
 
-AI compose는 FastAPI와 Ollama를 기본으로 실행하며 FastAPI는 `0.0.0.0:8000:8000`에 바인딩한다. 임베딩은 로컬 Ollama를 사용하고, FastAPI는 Docker 내부 DNS인 `http://ollama:11434`로 Ollama에 접근한다. Qdrant는 외부 EC2를 사용하므로 `QDRANT_HOST`, `QDRANT_PORT`를 환경변수로 받는다. BE가 AI에 접근할 수 있도록 AI 보안그룹에서 BE 보안그룹의 TCP `8000` 접근을 허용한다.
+AI compose는 FastAPI 컨테이너만 실행하며 `0.0.0.0:8000:8000`에 바인딩한다. 임베딩은 AI EC2 호스트에 systemd로 설치한 로컬 Ollama를 사용하고, FastAPI 컨테이너는 `host.docker.internal`을 통해 호스트 Ollama에 접근한다. Qdrant는 외부 EC2를 사용하므로 `QDRANT_HOST`, `QDRANT_PORT`를 환경변수로 받는다. BE가 AI에 접근할 수 있도록 AI 보안그룹에서 BE 보안그룹의 TCP `8000` 접근을 허용한다.
 
 AI 주요 환경변수:
 
@@ -152,7 +152,31 @@ TOOL_CLIENT
 BE_BASE_URL
 ```
 
-`EMBEDDING_PROVIDER=local`, `OLLAMA_BASE_URL=http://ollama:11434`를 기본값으로 사용한다. `ollama-init` 컨테이너가 `CHAT_MODEL`, `EMBEDDING_MODEL`을 pull하므로, 운영 배포 전에 모델 이름을 `.env`에서 확정한다.
+`EMBEDDING_PROVIDER=local`, `OLLAMA_BASE_URL=http://host.docker.internal:11434`를 기본값으로 사용한다. Ollama는 Docker Compose가 아니라 AI EC2 호스트에 직접 설치한다.
+
+```bash
+curl -fsSL https://ollama.com/install.sh | sh
+sudo systemctl enable ollama
+sudo systemctl start ollama
+ollama pull "${EMBEDDING_MODEL:-bge-m3}"
+```
+
+Docker 컨테이너에서 호스트 Ollama에 접근할 수 있도록 Ollama가 모든 인터페이스에 바인딩되어야 한다.
+
+```bash
+sudo systemctl edit ollama
+```
+
+```ini
+[Service]
+Environment="OLLAMA_HOST=0.0.0.0:11434"
+```
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl restart ollama
+curl http://localhost:11434/api/tags
+```
 
 ## Qdrant 배포
 
