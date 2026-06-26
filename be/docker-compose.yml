@@ -79,10 +79,9 @@ services:
       AWS_SECRET_KEY: ${AWS_SECRET_KEY:?AWS_SECRET_KEY is required}
 
       # 인프라 ESG 대시보드: CloudWatch CPU 조회 대상 리소스 (AWS 자격증명은 위 S3용을 재사용)
-      # AI를 ASG로 전환하면 application-local.yaml에서 instance-id → asg-name으로 바꾸고
-      # INFRA_ESG_AI_ASG_NAME 을 추가로 전달한다.
+      # AI는 ASG로 운영하므로 instance-id 대신 INFRA_ESG_AI_ASG_NAME(그룹 집계)을 전달한다.
       INFRA_ESG_BE_INSTANCE_ID: ${INFRA_ESG_BE_INSTANCE_ID:-}
-      INFRA_ESG_AI_INSTANCE_ID: ${INFRA_ESG_AI_INSTANCE_ID:-}
+      INFRA_ESG_AI_ASG_NAME: ${INFRA_ESG_AI_ASG_NAME:-}
       INFRA_ESG_QDRANT_INSTANCE_ID: ${INFRA_ESG_QDRANT_INSTANCE_ID:-}
 
       AI_BASE_URL: ${AI_BASE_URL:?AI_BASE_URL is required}
